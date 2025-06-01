@@ -10,11 +10,13 @@ This repository generates and uses five JSON files:
 
 2. **iplookup.json**: An optimized lookup structure where keys are IP addresses and values are lists of groups they belong to. This file enables faster lookups when checking which groups an IP belongs to.
 
-3. **countries_states_cities.json**: Geographic data including countries, regions, states, and cities. Used for geolocation features.
+3. **firehol_level1.json**: An list of IP cidr ranges from firehol level 1.
 
-4. **zip_codes.json**: Maps city and state combinations to ZIP codes for location-based filtering.
+4. **countries_states_cities.json**: Geographic data including countries, regions, states, and cities. Used for geolocation features.
 
-5. **datacenter_asns.json**: A list of Autonomous System Numbers (ASNs) associated with datacenters and hosting providers, often used to identify traffic from non-residential sources.
+5. **zip_codes.json**: Maps city and state combinations to ZIP codes for location-based filtering.
+
+6. **datacenter_asns.json**: A list of Autonomous System Numbers (ASNs) associated with datacenters and hosting providers, often used to identify traffic from non-residential sources.
 
 ## Usage
 
