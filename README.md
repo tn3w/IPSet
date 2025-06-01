@@ -143,7 +143,32 @@ for asn in ["AS16509", "AS14618"]:  # Amazon, Cloudflare
     print(f"{asn} is{' not' if not is_datacenter_asn(asn, asns) else ''} a datacenter ASN")
 ```
 
-This approach loads the ASNs into memory as a set, which provides O(1) lookup time complexity, making it extremely efficient for repeated lookups.
+### Checking IPs against FireHOL level1
+
+Use the following function to check if an IP address is in the FireHOL level1 list:
+
+```python
+import json
+from netaddr import IPAddress, IPNetwork
+
+def is_ip_in_firehol_level1(ip: str, firehol_file: str = "firehol_level1.json") -> bool:
+    """Check if an IP address is in the FireHOL level1 list."""
+    try:
+        with open(firehol_file) as f:
+            cidr_ranges = json.load(f)
+
+        for cidr in cidr_ranges:
+            if IPAddress(ip) in IPNetwork(cidr):
+                return True
+        return False
+    except Exception as e:
+        print(f"Error checking IP against FireHOL level1: {e}")
+        return False
+
+if __name__ == "__main__":
+    ip = "8.8.8.8" # Google DNS
+    print(f"IP {ip} {'is' if is_ip_in_firehol_level1(ip) else 'is not'} in FireHOL level1 list")
+```
 
 ## License
 Copyright 2025 TN3W
