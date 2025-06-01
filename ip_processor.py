@@ -16,6 +16,7 @@ import dns.resolver
 
 OUTPUT_FILE = "ipset.json"
 LOOKUP_FILE = "iplookup.json"
+ASN_FILE = "datacenter_asns.json"
 
 DATASETS = {
     "Tor-Exit-Nodes": "https://onionoo.torproject.org/details?flag=exit",
@@ -32,6 +33,7 @@ DATASETS = {
     "Firehol-Level1": "https://iplists.firehol.org/files/firehol_level1.netset",
     "Awesome-Proxies": "https://raw.githubusercontent.com/mthcht/awesome-lists/refs/heads/main/Lists/PROXY/ALL_PROXY_Lists.csv",
     "StopForumSpam": "http://www.stopforumspam.com/downloads/listed_ip_90.zip",
+    "Datacenter-ASNs": "https://raw.githubusercontent.com/brianhama/bad-asn-list/refs/heads/master/bad-asn-list.csv",
 }
 
 
@@ -327,8 +329,8 @@ def process_mullvad_servers(data: bytes) -> List[str]:
         return []
 
 
-def process_firehol_proxies(data: bytes) -> List[str]:
-    """Process FireHOL proxies database and return list of IPs."""
+def process_firehol(data: bytes) -> List[str]:
+    """Process FireHOL database and return list of IPs."""
     try:
         ip_addresses: List[str] = []
         content = data.decode("utf-8").splitlines()
@@ -344,25 +346,6 @@ def process_firehol_proxies(data: bytes) -> List[str]:
         return ip_addresses
     except UnicodeDecodeError as e:
         print(f"Error processing FireHOL proxies database: {e}")
-        return []
-
-
-def process_firehol_blocklist(data: bytes) -> List[str]:
-    """Process FireHOL blocklist data and return list of IPs."""
-    try:
-        ip_addresses: List[str] = []
-        content = data.decode("utf-8").splitlines()
-
-        for line in content:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-
-            ip_addresses.append(line)
-
-        return ip_addresses
-    except UnicodeDecodeError as e:
-        print(f"Error processing FireHOL blocklist: {e}")
         return []
 
 
@@ -404,6 +387,33 @@ def process_stopforumspam(data: bytes) -> List[str]:
         return list(ip_addresses)
     except Exception as e:
         print(f"Error processing StopForumSpam data: {e}")
+        return []
+
+
+def process_data_center_asns(data: bytes) -> List[str]:
+    """
+    Process Data Center ASNs database and return list of ASNs.
+
+    Args:
+        data: The downloaded CSV file content as bytes
+
+    Returns:
+        List of ASN strings
+    """
+    try:
+        asns: Set[str] = set()
+        csv_data = StringIO(data.decode("utf-8"))
+
+        csv_reader = csv.reader(csv_data)
+        next(csv_reader, None)
+        for row in csv_reader:
+            if row and len(row) > 0:
+                asn = row[0].strip()
+                asns.add(asn)
+
+        return list(asns)
+    except (UnicodeDecodeError, csv.Error) as e:
+        print(f"Error processing data center ASNs database: {e}")
         return []
 
 
@@ -455,10 +465,11 @@ def process_dataset(source_name: str, data: bytes) -> List[str]:
         "Private-Internet-Access": process_pia_servers,
         "CyberGhost": process_cyberghost_servers,
         "Mullvad": process_mullvad_servers,
-        "Firehol-Proxies": process_firehol_proxies,
-        "Firehol-Level1": process_firehol_blocklist,
+        "Firehol-Proxies": process_firehol,
+        "Firehol-Level1": process_firehol,
         "Awesome-Proxies": process_awesome_lists_proxies,
         "StopForumSpam": process_stopforumspam,
+        "Datacenter-ASNs": process_data_center_asns,
     }
 
     if source_name in processors:
@@ -492,19 +503,24 @@ def main():
     """Main function to process all datasets and create the ipset.json file."""
     result_dict = {}
     surfshark_ips = set()
+    datacenter_asns = []
 
     for source_name, url in DATASETS.items():
         data = download_file(url, source_name)
-        ip_list = process_dataset(source_name, data)
-        sorted_ip_list = sort_ip_addresses(ip_list)
+        result = process_dataset(source_name, data)
+
+        if source_name == "Datacenter-ASNs":
+            datacenter_asns = result
+            print(f"Processed {len(datacenter_asns)} ASNs for {source_name}")
+            continue
 
         if source_name in ["Surfshark-Servers", "Surfshark-Hostnames"]:
-            surfshark_ips.update(sorted_ip_list)
+            surfshark_ips.update(result)
             continue
 
         key = source_name.replace("-", "")
-        result_dict[key] = sorted_ip_list
-        print(f"Processed {len(sorted_ip_list)} IPs for {source_name}")
+        result_dict[key] = sort_ip_addresses(result)
+        print(f"Processed {len(result)} IPs for {source_name}")
 
     sorted_surfshark_ips = sort_ip_addresses(list(surfshark_ips))
     result_dict["Surfshark"] = sorted_surfshark_ips
@@ -515,6 +531,11 @@ def main():
 
     print(f"Successfully created {OUTPUT_FILE}")
     create_ip_lookup_file(result_dict)
+
+    with open(ASN_FILE, "w", encoding="utf-8") as json_file:
+        json.dump(datacenter_asns, json_file)
+
+    print(f"Successfully created {ASN_FILE} with {len(datacenter_asns)} ASNs")
 
 
 if __name__ == "__main__":

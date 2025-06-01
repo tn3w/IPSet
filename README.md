@@ -4,7 +4,7 @@ A collection of tools to build and query IP address sets from various sources in
 
 ## JSON Files
 
-This repository generates and uses four JSON files:
+This repository generates and uses five JSON files:
 
 1. **ipset.json**: The primary dataset containing mappings from group names to lists of IP addresses. Groups include VPN providers (NordVPN, ExpressVPN, etc.), Tor exit nodes, and known proxies.
 
@@ -14,6 +14,8 @@ This repository generates and uses four JSON files:
 
 4. **zip_codes.json**: Maps city and state combinations to ZIP codes for location-based filtering.
 
+5. **datacenter_asns.json**: A list of Autonomous System Numbers (ASNs) associated with datacenters and hosting providers, often used to identify traffic from non-residential sources.
+
 ## Usage
 
 ### Generating the Files
@@ -21,7 +23,7 @@ This repository generates and uses four JSON files:
 Run the following scripts to generate the JSON files:
 
 ```bash
-# Generate ipset.json and iplookup.json
+# Generate ipset.json, iplookup.json, and datacenter_asns.json
 python ip_processor.py
 
 # Generate countries_states_cities.json and zip_codes.json
@@ -108,6 +110,38 @@ def search_ip_in_lookup(ip: str, lookup_file: str = "iplookup.json") -> List[str
         print(f"Error searching for IP in iplookup.json: {e}")
         return []
 ```
+
+### Working with Datacenter ASNs
+
+The `datacenter_asns.json` file contains a list of ASNs (Autonomous System Numbers) associated with datacenter and hosting providers. You can use this list to identify traffic coming from non-residential sources.
+
+Here's an example of how to efficiently check if an ASN belongs to a datacenter:
+
+```python
+import json
+
+def load_datacenter_asns(asn_file: str = "datacenter_asns.json") -> set:
+    """Load datacenter ASNs into a set for O(1) lookups."""
+    try:
+        with open(asn_file) as f:
+            return set(json.load(f))
+    except Exception as e:
+        print(f"Error loading ASNs: {e}")
+        return set()
+
+def is_datacenter_asn(asn: str, asns: set = None) -> bool:
+    """Check if ASN belongs to a datacenter."""
+    if not asns:
+        asns = load_datacenter_asns()
+    return asn.replace("AS", "") in asns
+
+# Example:
+asns = load_datacenter_asns()
+for asn in ["AS16509", "AS14618"]:  # Amazon, Cloudflare
+    print(f"{asn} is{' not' if not is_datacenter_asn(asn, asns) else ''} a datacenter ASN")
+```
+
+This approach loads the ASNs into memory as a set, which provides O(1) lookup time complexity, making it extremely efficient for repeated lookups.
 
 ## License
 Copyright 2025 TN3W
