@@ -11,12 +11,13 @@ import urllib.request
 from io import StringIO, BytesIO
 from typing import Dict, List, Set, Tuple
 from concurrent.futures import ThreadPoolExecutor
-from netaddr import IPAddress
+from netaddr import IPAddress, IPNetwork
 import dns.resolver
 
 OUTPUT_FILE = "ipset.json"
 LOOKUP_FILE = "iplookup.json"
 ASN_FILE = "datacenter_asns.json"
+FIREHOL_LEVEL1_FILE = "firehol_level1.json"
 
 DATASETS = {
     "Tor-Exit-Nodes": "https://onionoo.torproject.org/details?flag=exit",
@@ -329,7 +330,7 @@ def process_mullvad_servers(data: bytes) -> List[str]:
         return []
 
 
-def process_firehol(data: bytes) -> List[str]:
+def process_firehol_proxies(data: bytes) -> List[str]:
     """Process FireHOL database and return list of IPs."""
     try:
         ip_addresses: List[str] = []
@@ -340,8 +341,34 @@ def process_firehol(data: bytes) -> List[str]:
             if not line or line.startswith("#"):
                 continue
 
-            if "/" not in line:
+            if "/" in line:
+                try:
+                    network = IPNetwork(line)
+                    for ip in network:
+                        ip_addresses.append(str(ip))
+                except Exception as e:
+                    print(f"Error processing FireHOL proxies database: {e}")
+            else:
                 ip_addresses.append(line)
+
+        return ip_addresses
+    except UnicodeDecodeError as e:
+        print(f"Error processing FireHOL proxies database: {e}")
+        return []
+
+
+def process_firehol_level1(data: bytes) -> List[str]:
+    """Process FireHOL database and return list of IPs."""
+    try:
+        ip_addresses: List[str] = []
+        content = data.decode("utf-8").splitlines()
+
+        for line in content:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            ip_addresses.append(line)
 
         return ip_addresses
     except UnicodeDecodeError as e:
@@ -465,8 +492,8 @@ def process_dataset(source_name: str, data: bytes) -> List[str]:
         "Private-Internet-Access": process_pia_servers,
         "CyberGhost": process_cyberghost_servers,
         "Mullvad": process_mullvad_servers,
-        "Firehol-Proxies": process_firehol,
-        "Firehol-Level1": process_firehol,
+        "Firehol-Proxies": process_firehol_proxies,
+        "Firehol-Level1": process_firehol_level1,
         "Awesome-Proxies": process_awesome_lists_proxies,
         "StopForumSpam": process_stopforumspam,
         "Datacenter-ASNs": process_data_center_asns,
@@ -504,10 +531,15 @@ def main():
     result_dict = {}
     surfshark_ips = set()
     datacenter_asns = []
+    firehol_level1_ips = set()
 
     for source_name, url in DATASETS.items():
         data = download_file(url, source_name)
         result = process_dataset(source_name, data)
+
+        if source_name == "Firehol-Level1":
+            firehol_level1_ips.update(result)
+            continue
 
         if source_name == "Datacenter-ASNs":
             datacenter_asns = result
@@ -521,6 +553,11 @@ def main():
         key = source_name.replace("-", "")
         result_dict[key] = sort_ip_addresses(result)
         print(f"Processed {len(result)} IPs for {source_name}")
+
+    with open(FIREHOL_LEVEL1_FILE, "w", encoding="utf-8") as json_file:
+        json.dump(list(firehol_level1_ips), json_file)
+
+    print(f"Processed {len(firehol_level1_ips)} IPs for FireHOL Level 1")
 
     sorted_surfshark_ips = sort_ip_addresses(list(surfshark_ips))
     result_dict["Surfshark"] = sorted_surfshark_ips
