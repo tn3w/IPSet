@@ -19,17 +19,18 @@ LOOKUP_FILE = "iplookup.json"
 
 DATASETS = {
     "Tor-Exit-Nodes": "https://onionoo.torproject.org/details?flag=exit",
-    "NordVPN-Servers": "https://api.nordvpn.com/v1/servers?limit=10000",
-    "ProtonVPN-Servers": "https://raw.githubusercontent.com/tn3w/ProtonVPN-IPs/refs/heads/master/protonvpn_ips.json",
-    "ExpressVPN-Servers": "https://raw.githubusercontent.com/sudesh0sudesh/ExpressVPN-IPs/refs/heads/main/express_ips.csv",
+    "NordVPN": "https://api.nordvpn.com/v1/servers?limit=10000",
+    "ProtonVPN": "https://raw.githubusercontent.com/tn3w/ProtonVPN-IPs/refs/heads/master/protonvpn_ips.json",
+    "ExpressVPN": "https://raw.githubusercontent.com/sudesh0sudesh/ExpressVPN-IPs/refs/heads/main/express_ips.csv",
     "Surfshark-Servers": "https://raw.githubusercontent.com/sudesh0sudesh/surfshark-IPs/refs/heads/main/surfshark_ips.csv",
     "Surfshark-Hostnames": "https://surfshark.com/api/v1/server/configurations",
-    "Private-Internet-Access-Servers": "https://serverlist.piaservers.net/vpninfo/servers/v6",
-    "CyberGhost-Servers": "https://gist.githubusercontent.com/Windows81/17e75698d4fe349bcfb71d1c1ca537d4/raw/88713feecd901acaa03b3805b7ac1ab19ada73b2/.txt",
-    "TunnelBear-Servers": "https://raw.githubusercontent.com/tn3w/TunnelBear-IPs/refs/heads/master/tunnelbear_ips.json",
+    "Private-Internet-Access": "https://serverlist.piaservers.net/vpninfo/servers/v6",
+    "CyberGhost": "https://gist.githubusercontent.com/Windows81/17e75698d4fe349bcfb71d1c1ca537d4/raw/88713feecd901acaa03b3805b7ac1ab19ada73b2/.txt",
+    "TunnelBear": "https://raw.githubusercontent.com/tn3w/TunnelBear-IPs/refs/heads/master/tunnelbear_ips.json",
     "Mullvad": "https://api.mullvad.net/www/relays/all",
     "Firehol-Proxies": "https://iplists.firehol.org/files/firehol_proxies.netset",
-    "Awesome-Lists-Proxies": "https://raw.githubusercontent.com/mthcht/awesome-lists/refs/heads/main/Lists/PROXY/ALL_PROXY_Lists.csv",
+    "Firehol-Level1": "https://iplists.firehol.org/files/firehol_level1.netset",
+    "Awesome-Proxies": "https://raw.githubusercontent.com/mthcht/awesome-lists/refs/heads/main/Lists/PROXY/ALL_PROXY_Lists.csv",
     "StopForumSpam": "http://www.stopforumspam.com/downloads/listed_ip_90.zip",
 }
 
@@ -346,6 +347,25 @@ def process_firehol_proxies(data: bytes) -> List[str]:
         return []
 
 
+def process_firehol_blocklist(data: bytes) -> List[str]:
+    """Process FireHOL blocklist data and return list of IPs."""
+    try:
+        ip_addresses: List[str] = []
+        content = data.decode("utf-8").splitlines()
+
+        for line in content:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            ip_addresses.append(line)
+
+        return ip_addresses
+    except UnicodeDecodeError as e:
+        print(f"Error processing FireHOL blocklist: {e}")
+        return []
+
+
 def process_awesome_lists_proxies(data: bytes) -> List[str]:
     """Process Awesome Lists proxies data and return list of IPs."""
     try:
@@ -424,19 +444,20 @@ def process_dataset(source_name: str, data: bytes) -> List[str]:
 
     processors = {
         "Tor-Exit-Nodes": process_tor_exit_nodes,
-        "NordVPN-Servers": process_nordvpn_servers,
-        "ExpressVPN-Servers": process_sudesh0sudesh_servers,
+        "NordVPN": process_nordvpn_servers,
+        "ExpressVPN": process_sudesh0sudesh_servers,
         "Surfshark-Servers": process_sudesh0sudesh_servers,
-        "ProtonVPN-Servers": process_protonvpn_tunnelbear_servers,
-        "TunnelBear-Servers": process_protonvpn_tunnelbear_servers,
+        "ProtonVPN": process_protonvpn_tunnelbear_servers,
+        "TunnelBear": process_protonvpn_tunnelbear_servers,
         "Surfshark-Hostnames": lambda _: process_surfshark_hostnames(
             DATASETS["Surfshark-Hostnames"]
         ),
-        "Private-Internet-Access-Servers": process_pia_servers,
-        "CyberGhost-Servers": process_cyberghost_servers,
+        "Private-Internet-Access": process_pia_servers,
+        "CyberGhost": process_cyberghost_servers,
         "Mullvad": process_mullvad_servers,
         "Firehol-Proxies": process_firehol_proxies,
-        "Awesome-Lists-Proxies": process_awesome_lists_proxies,
+        "Firehol-Level1": process_firehol_blocklist,
+        "Awesome-Proxies": process_awesome_lists_proxies,
         "StopForumSpam": process_stopforumspam,
     }
 
@@ -470,18 +491,24 @@ def create_ip_lookup_file(group_to_ips: Dict[str, List[str]]) -> None:
 def main():
     """Main function to process all datasets and create the ipset.json file."""
     result_dict = {}
+    surfshark_ips = set()
 
     for source_name, url in DATASETS.items():
         data = download_file(url, source_name)
-
         ip_list = process_dataset(source_name, data)
-
         sorted_ip_list = sort_ip_addresses(ip_list)
+
+        if source_name in ["Surfshark-Servers", "Surfshark-Hostnames"]:
+            surfshark_ips.update(sorted_ip_list)
+            continue
 
         key = source_name.replace("-", "")
         result_dict[key] = sorted_ip_list
-
         print(f"Processed {len(sorted_ip_list)} IPs for {source_name}")
+
+    sorted_surfshark_ips = sort_ip_addresses(list(surfshark_ips))
+    result_dict["Surfshark"] = sorted_surfshark_ips
+    print(f"Processed {len(sorted_surfshark_ips)} IPs for Surfshark (combined)")
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as json_file:
         json.dump(result_dict, json_file)
