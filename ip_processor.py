@@ -20,33 +20,16 @@ LOOKUP_FILE = "iplookup.json"
 DATASETS = {
     "Tor-Exit-Nodes": "https://onionoo.torproject.org/details?flag=exit",
     "NordVPN-Servers": "https://api.nordvpn.com/v1/servers?limit=10000",
-    "ProtonVPN-Servers": (
-        "https://raw.githubusercontent.com/tn3w/ProtonVPN-IPs/refs/heads/master/protonvpn_ips.json",
-    ),
-    "ExpressVPN-Servers": (
-        "https://raw.githubusercontent.com/sudesh0sudesh/ExpressVPN-IPs"
-        "/refs/heads/main/express_ips.csv",
-    ),
-    "Surfshark-Servers": (
-        "https://raw.githubusercontent.com/sudesh0sudesh/surfshark-IPs"
-        "/refs/heads/main/surfshark_ips.csv",
-    ),
+    "ProtonVPN-Servers": "https://raw.githubusercontent.com/tn3w/ProtonVPN-IPs/refs/heads/master/protonvpn_ips.json",
+    "ExpressVPN-Servers": "https://raw.githubusercontent.com/sudesh0sudesh/ExpressVPN-IPs/refs/heads/main/express_ips.csv",
+    "Surfshark-Servers": "https://raw.githubusercontent.com/sudesh0sudesh/surfshark-IPs/refs/heads/main/surfshark_ips.csv",
     "Surfshark-Hostnames": "https://surfshark.com/api/v1/server/configurations",
     "Private-Internet-Access-Servers": "https://serverlist.piaservers.net/vpninfo/servers/v6",
-    "CyberGhost-Servers": (
-        "https://gist.githubusercontent.com/Windows81/17e75698d4fe349bcfb71d1c1ca537d4"
-        "/raw/88713feecd901acaa03b3805b7ac1ab19ada73b2/.txt",
-    ),
-    "TunnelBear-Servers": (
-        "https://raw.githubusercontent.com/tn3w/TunnelBear-IPs"
-        "/refs/heads/master/tunnelbear_ips.json",
-    ),
+    "CyberGhost-Servers": "https://gist.githubusercontent.com/Windows81/17e75698d4fe349bcfb71d1c1ca537d4/raw/88713feecd901acaa03b3805b7ac1ab19ada73b2/.txt",
+    "TunnelBear-Servers": "https://raw.githubusercontent.com/tn3w/TunnelBear-IPs/refs/heads/master/tunnelbear_ips.json",
     "Mullvad": "https://api.mullvad.net/www/relays/all",
     "Firehol-Proxies": "https://iplists.firehol.org/files/firehol_proxies.netset",
-    "Awesome-Lists-Proxies": (
-        "https://raw.githubusercontent.com/mthcht/awesome-lists/refs/heads/main"
-        "/Lists/PROXY/ALL_PROXY_Lists.csv",
-    ),
+    "Awesome-Lists-Proxies": "https://raw.githubusercontent.com/mthcht/awesome-lists/refs/heads/main/Lists/PROXY/ALL_PROXY_Lists.csv",
     "StopForumSpam": "http://www.stopforumspam.com/downloads/listed_ip_90.zip",
 }
 
