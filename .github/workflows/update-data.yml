@@ -35,6 +35,6 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add ipset.json iplookup.json countries_states_cities.json zip_codes.json firehol_level1.json datacenter_asns.json
+          git add ipset.json iplookup.json iplist.json countries_states_cities.json zip_codes.json firehol_level1.json datacenter_asns.json
           git commit -m "Update IP and geo data [skip ci]" || echo "No changes to commit"
           git push
