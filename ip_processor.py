@@ -18,7 +18,7 @@ OUTPUT_FILE = "ipset.json"
 LOOKUP_FILE = "iplookup.json"
 ASN_FILE = "datacenter_asns.json"
 FIREHOL_LEVEL1_FILE = "firehol_level1.json"
-IP_LIST_FILE = "ip_list.json"
+IP_LIST_FILE = "iplist.json"
 
 DATASETS = {
     "Tor-Exit-Nodes": "https://onionoo.torproject.org/details?flag=exit",
