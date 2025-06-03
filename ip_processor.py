@@ -18,6 +18,7 @@ OUTPUT_FILE = "ipset.json"
 LOOKUP_FILE = "iplookup.json"
 ASN_FILE = "datacenter_asns.json"
 FIREHOL_LEVEL1_FILE = "firehol_level1.json"
+IP_LIST_FILE = "ip_list.json"
 
 DATASETS = {
     "Tor-Exit-Nodes": "https://onionoo.torproject.org/details?flag=exit",
@@ -526,6 +527,25 @@ def create_ip_lookup_file(group_to_ips: Dict[str, List[str]]) -> None:
     print(f"Successfully created {LOOKUP_FILE} with {len(ip_to_groups)} unique IPs")
 
 
+def create_flat_ip_list(group_to_ips: Dict[str, List[str]]) -> None:
+    """
+    Create a flat list of all unique IPs from all sources.
+    IPs are sorted with IPv4 first, then IPv6, all IPv6 in long format.
+    """
+    print("Creating flat IP list...")
+    unique_ips = set()
+    
+    for _, ips in group_to_ips.items():
+        unique_ips.update(ips)
+    
+    sorted_ips = sort_ip_addresses(list(unique_ips))
+    
+    with open(IP_LIST_FILE, "w", encoding="utf-8") as json_file:
+        json.dump(sorted_ips, json_file)
+    
+    print(f"Successfully created {IP_LIST_FILE} with {len(sorted_ips)} unique IPs")
+
+
 def main():
     """Main function to process all datasets and create the ipset.json file."""
     result_dict = {}
@@ -573,6 +593,8 @@ def main():
         json.dump(datacenter_asns, json_file)
 
     print(f"Successfully created {ASN_FILE} with {len(datacenter_asns)} ASNs")
+    
+    create_flat_ip_list(result_dict)
 
 
 if __name__ == "__main__":
