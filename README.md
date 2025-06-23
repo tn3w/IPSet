@@ -79,7 +79,7 @@ You can use the following functions to check which groups an IP belongs to:
 
 ```python
 import json
-from typing import List, Dict
+from typing import List
 from netaddr import IPAddress, IPNetwork
 
 def search_ip_in_ipset(ip: str, ipset_file: str = "ipset.json") -> List[str]:
@@ -87,24 +87,41 @@ def search_ip_in_ipset(ip: str, ipset_file: str = "ipset.json") -> List[str]:
     Search for an IP address in the ipset.json file and return all groups it belongs to.
     This is slower as it has to iterate through all groups and their IP lists.
     Supports both direct IP matches and CIDR range matches.
-    
+
     Args:
         ip: The IP address to search for
         ipset_file: Path to the ipset.json file
-        
+
     Returns:
         List of group names that contain the IP address
     """
     try:
-        with open(ipset_file, 'r', encoding='utf-8') as f:
+        with open(ipset_file, "r", encoding="utf-8") as f:
             group_to_ips = json.load(f)
 
         ip_obj = IPAddress(ip)
+        ip_version = ip_obj.version
         matching_groups = []
         for group, ips in group_to_ips.items():
             for ip_or_cidr in ips:
-                if '/' in ip_or_cidr:
-                    if ip_obj in IPNetwork(ip_or_cidr):
+                if "/" in ip_or_cidr:
+                    cidr = IPNetwork(ip_or_cidr)
+                    if cidr.version != ip_version:
+                        continue
+
+                    ip_int = int(ip_obj)
+                    net_int = int(cidr.network)
+                    prefix_len = cidr.prefixlen
+
+                    if ip_version == 4:
+                        mask = ((1 << 32) - 1) ^ ((1 << (32 - prefix_len)) - 1)
+                    else:
+                        mask = ((1 << 128) - 1) ^ ((1 << (128 - prefix_len)) - 1)
+
+                    if (ip_int & mask) != (net_int & mask):
+                        continue
+
+                    if ip_obj in cidr:
                         matching_groups.append(group)
                         break
                 elif ip == ip_or_cidr:
@@ -116,28 +133,46 @@ def search_ip_in_ipset(ip: str, ipset_file: str = "ipset.json") -> List[str]:
         print(f"Error searching for IP in ipset.json: {e}")
         return []
 
+
 def search_ip_in_lookup(ip: str, lookup_file: str = "iplookup.json") -> List[str]:
     """
     Search for an IP address in the iplookup.json file and return all groups it belongs to.
     This checks for direct IP matches and also if the IP is contained within any CIDR ranges.
-    
+
     Args:
         ip: The IP address to search for
         lookup_file: Path to the iplookup.json file
-        
+
     Returns:
         List of group names that contain the IP address
     """
     try:
-        with open(lookup_file, 'r', encoding='utf-8') as f:
+        with open(lookup_file, "r", encoding="utf-8") as f:
             ip_to_groups = json.load(f)
-        
+
         matching_groups = ip_to_groups.get(ip, [])
 
         ip_obj = IPAddress(ip)
+        ip_version = ip_obj.version
         for ip_or_cidr, groups in ip_to_groups.items():
-            if '/' in ip_or_cidr:
-                if ip_obj in IPNetwork(ip_or_cidr):
+            if "/" in ip_or_cidr:
+                cidr = IPNetwork(ip_or_cidr)
+                if cidr.version != ip_version:
+                    continue
+
+                ip_int = int(ip_obj)
+                net_int = int(cidr.network)
+                prefix_len = cidr.prefixlen
+
+                if ip_version == 4:
+                    mask = ((1 << 32) - 1) ^ ((1 << (32 - prefix_len)) - 1)
+                else:
+                    mask = ((1 << 128) - 1) ^ ((1 << (128 - prefix_len)) - 1)
+
+                if (ip_int & mask) != (net_int & mask):
+                    continue
+
+                if ip_obj in cidr:
                     for group in groups:
                         if group not in matching_groups:
                             matching_groups.append(group)
@@ -148,28 +183,74 @@ def search_ip_in_lookup(ip: str, lookup_file: str = "iplookup.json") -> List[str
         return []
 ```
 
+### Searching for IP Group Membership (Optimized)
+
+This is a more optimized way to search for IP group membership. It uses a dictionary of IP addresses and their groups, and a dictionary of CIDR ranges and their groups. It loads the data into memory and then uses the dictionary to search for the IP address.
+
+Output:
+```
+IP: 8.8.4.4
+  Time taken: 0.06616806983947754 seconds
+  Groups: ['Datacenter']
+
+IP: 185.220.101.33
+  Time taken: 0.06744527816772461 seconds
+  Groups: ['TorExitNodes', 'StopForumSpam']
+
+IP: 76.240.243.24
+  Time taken: 0.06687688827514648 seconds
+  Groups: None
+```
+
 Example:
 ```python
 import json
+import time
+from typing import List, Dict, Tuple
+from netaddr import IPAddress, IPNetwork
 
-def load_lookup_ip_file(lookup_file: str = "iplookup.json") -> Dict[str, List[str]]:
+
+def load_ip_file(
+    lookup_file: str = "ipset.json",
+) -> Tuple[Dict[str, List[str]], Dict[IPNetwork, List[str]]]:
     """Load the lookup IP file into a dictionary."""
     try:
-        with open(lookup_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        with open(lookup_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+            ip_to_groups: Dict[str, List[str]] = {}
+            cidrs_to_ips: Dict[IPNetwork, List[str]] = {}
+
+            for group, ips in data.items():
+                for ip in ips:
+                    if "/" in ip:
+                        ip_obj = IPNetwork(ip)
+                        if ip_obj not in cidrs_to_ips:
+                            cidrs_to_ips[ip_obj] = []
+                        cidrs_to_ips[ip_obj].append(group)
+                        continue
+
+                    if ip not in ip_to_groups:
+                        ip_to_groups[ip] = []
+                    ip_to_groups[ip].append(group)
+
+            return ip_to_groups, cidrs_to_ips
     except Exception as e:
         print(f"Error loading lookup IP file: {e}")
+        return {}, {}
 
 
-def search_ip_in_lookup(ip: str, ips: Dict[str, List[str]]) -> List[str]:
+def search_ip_in_lookup(
+    ip: str, ips: Dict[str, List[str]], cidrs: Dict[IPNetwork, List[str]]
+) -> List[str]:
     """
     Search for an IP address in the iplookup.json file and return all groups it belongs to.
     This checks for direct IP matches and also if the IP is contained within any CIDR ranges.
-    
+
     Args:
         ip: The IP address to search for
         ips: The dictionary of IP addresses and their groups
-        
+
     Returns:
         List of group names that contain the IP address
     """
@@ -177,12 +258,28 @@ def search_ip_in_lookup(ip: str, ips: Dict[str, List[str]]) -> List[str]:
         matching_groups = ips.get(ip, [])
 
         ip_obj = IPAddress(ip)
-        for ip_or_cidr, groups in ips.items():
-            if '/' in ip_or_cidr:
-                if ip_obj in IPNetwork(ip_or_cidr):
-                    for group in groups:
-                        if group not in matching_groups:
-                            matching_groups.append(group)
+        ip_version = ip_obj.version
+
+        for cidr, groups in cidrs.items():
+            if cidr.version != ip_version:
+                continue
+
+            ip_int = int(ip_obj)
+            net_int = int(cidr.network)
+            prefix_len = cidr.prefixlen
+
+            if ip_version == 4:
+                mask = ((1 << 32) - 1) ^ ((1 << (32 - prefix_len)) - 1)
+            else:
+                mask = ((1 << 128) - 1) ^ ((1 << (128 - prefix_len)) - 1)
+
+            if (ip_int & mask) != (net_int & mask):
+                continue
+
+            if ip_obj in cidr:
+                for group in groups:
+                    if group not in matching_groups:
+                        matching_groups.append(group)
 
         return matching_groups
     except Exception as e:
@@ -191,21 +288,26 @@ def search_ip_in_lookup(ip: str, ips: Dict[str, List[str]]) -> List[str]:
 
 
 if __name__ == "__main__":
-    ips = load_lookup_ip_file()
+    ips, cidrs = load_ip_file()
     for ip in [
-        "1.1.1.1",         # Cloudflare DNS (datacenter)
+        "8.8.4.4",  # Google DNS (datacenter)
         "185.220.101.33",  # Known Tor exit node
-        "45.95.169.255",   # Typically a VPN IP
-        "104.28.255.97",   # Cloudflare proxy
-        "76.240.243.24",   # Typical residential IP
-        "2a03:2880:f12f:83:face:b00c:0:25de"  # Facebook's IPv6 (datacenter)
+        "76.240.243.24",  # Typical residential IP
     ]:
         print(f"IP: {ip}")
-        groups = search_ip_in_lookup(ip)
+        start_time = time.time()
+        groups = search_ip_in_lookup(ip, ips, cidrs)
+        end_time = time.time()
+        print(f"  Time taken: {end_time - start_time} seconds")
         print(f"  Groups: {groups if groups else 'None'}\n")
 ```
 
 ### Working with Datacenter ASNs
+
+> [!NOTE]
+> This can be deprecated since the datacenter CIDRs are already in the `ipset.json` file.
+> This is only useful if you want to check if an ASN belongs to a datacenter.
+> For normal IP lookups, you should use the `ipset.json` or `iplookup.json` files.
 
 The `datacenter_asns.json` file contains a list of ASNs (Autonomous System Numbers) associated with datacenter and hosting providers. You can use this list to identify traffic coming from non-residential sources.
 
