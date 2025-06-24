@@ -24,10 +24,7 @@ IP_LIST_FILE: Final[str] = "iplist.json"
 IP_LIST_TXT_FILE: Final[str] = "iplist.txt"
 DATACENTER_ASNS_FILE: Final[str] = "datacenter_asns.json"
 
-IP_LIST_TXT_HEADER: Final[
-    str
-] = """
-#
+IP_LIST_TXT_HEADER: Final[str] = """#
 # iplist.txt
 # https://github.com/tn3w/IPSet/blob/master/iplist.txt
 #
