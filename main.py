@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import concurrent.futures
 import csv
 import json
 import os
 import re
 import socket
-import urllib.error
+import time
 import urllib.request
 import zipfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO, StringIO
 from typing import Dict, Final, List, Set, Tuple
-import time
-
 from netaddr import IPAddress, IPNetwork, ipv6_compact
-import dns.resolver
 
 OUTPUT_FILE: Final[str] = "ipset.json"
 LOOKUP_FILE: Final[str] = "iplookup.json"
@@ -58,10 +54,6 @@ DATASETS: Final[Dict[str, str]] = {
     ),
     "Surfshark-Hostnames": "https://surfshark.com/api/v1/server/configurations",
     "Private-Internet-Access": "https://serverlist.piaservers.net/vpninfo/servers/v6",
-    "CyberGhost": (
-        "https://gist.githubusercontent.com/Windows81/17e75698d4fe349bcfb71d1c1ca537d4/"
-        "raw/88713feecd901acaa03b3805b7ac1ab19ada73b2/.txt"
-    ),
     "TunnelBear": (
         "https://raw.githubusercontent.com/tn3w/TunnelBear-IPs/"
         "refs/heads/master/tunnelbear_ips.json"
@@ -150,38 +142,73 @@ def extract_ipv6(addr: str) -> str:
         return addr
 
 
-def resolve_hostname(hostname: str) -> Tuple[str, List[str]]:
-    """
-    Resolve a hostname to IP addresses using both socket and DNS lookups.
-    """
+def get_subdomains_from_crtsh(domain: str) -> List[str]:
+    """Get subdomains for a domain from crt.sh using their web API."""
+    subdomains = set()
+    try:
+        with urllib.request.urlopen(
+            f"https://crt.sh/json?q={domain}", timeout=60
+        ) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode("utf-8"))
+                for item in data:
+                    for name in item.get("name_value", "").split("\n"):
+                        if (
+                            domain in name
+                            and name.endswith(domain)
+                            and name != domain
+                            and "*" not in name
+                        ):
+                            subdomains.add(name.strip().lower())
+    except Exception as e:
+        print(f"Error with crt.sh API: {e}")
+
+    return list(subdomains)
+
+
+def get_ips_for_hostname(hostname: str) -> List[str]:
+    """Get both IPv4 and IPv6 addresses for a hostname."""
     ips = set()
 
     try:
-        info = socket.getaddrinfo(hostname, None, socket.AF_INET)
-        for _, _, _, _, addr in info:
-            ips.add(addr[0])
-
-        info = socket.getaddrinfo(hostname, None, socket.AF_INET6)
-        for _, _, _, _, addr in info:
-            ips.add(str(IPAddress(addr[0], version=6)))
-    except Exception as e:
-        print(f"Socket error resolving {hostname}: {e}")
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            ips.add(info[4][0])
+    except (socket.gaierror, socket.herror) as e:
+        print(f"IPv4 lookup failed for {hostname}: {e}")
 
     try:
-        answers = dns.resolver.resolve(hostname, "A")
-        for rdata in answers:
-            ips.add(str(rdata))
-    except Exception as e:
-        print(f"DNS error resolving A records for {hostname}: {e}")
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET6):
+            ips.add(info[4][0])
+    except (socket.gaierror, socket.herror) as e:
+        print(f"IPv6 lookup failed for {hostname}: {e}")
 
-    try:
-        answers = dns.resolver.resolve(hostname, "AAAA")
-        for rdata in answers:
-            ips.add(str(IPAddress(str(rdata), version=6)))
-    except Exception as e:
-        print(f"DNS error resolving AAAA records for {hostname}: {e}")
+    return list(ips)
 
-    return hostname, list(ips)
+
+def batch_get_ips_for_hostnames(hostnames: List[str], workers: int = 10) -> List[str]:
+    """Get IP addresses for multiple hostnames in parallel."""
+    ip_addresses = set()
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(get_ips_for_hostname, hostname): hostname
+            for hostname in hostnames
+        }
+
+        for i, future in enumerate(as_completed(futures)):
+            hostname = futures[future]
+            try:
+                ips = future.result()
+                if ips:
+                    print(f"Found {len(ips)} IPs for {hostname}")
+                    ip_addresses.update(ips)
+            except Exception as e:
+                print(f"Error processing {hostname}: {e}")
+
+            if (i + 1) % 10 == 0:
+                print(f"Progress: {i + 1}/{len(hostnames)} hostnames processed")
+
+    return list(ip_addresses)
 
 
 def process_tor_exit_nodes(data: bytes) -> List[str]:
@@ -298,16 +325,7 @@ def process_surfshark_hostnames(url: str) -> List[str]:
 
         remote_addresses = extract_surfshark_remote_addresses(configs)
 
-        all_ips: Set[str] = set()
-        with ThreadPoolExecutor(max_workers=20) as executor:
-            results = list(executor.map(resolve_hostname, remote_addresses))
-
-        for _, ips in sorted(results):
-            if not ips:
-                continue
-            all_ips.update(ips)
-
-        return list(all_ips)
+        return batch_get_ips_for_hostnames(list(remote_addresses))
     except Exception as e:
         print(f"Error processing Surfshark data: {e}")
         return []
@@ -348,32 +366,17 @@ def process_pia_servers(data: bytes) -> List[str]:
         return []
 
 
-def process_cyberghost_servers(data: bytes) -> List[str]:
-    """Process Cyberghost server data and return list of IPs."""
-    try:
-        ip_addresses: Set[str] = set()
-        content = data.decode("utf-8").splitlines()
+def get_cyberghost_ips() -> List[str]:
+    """Get Cyberghost IPs from a URL."""
 
-        for line in content:
-            if not line.strip():
-                continue
-
-            parts = line.strip().split()
-            if parts:
-                ip = parts[0].strip()
-
-                if ":" in ip and ip.count(":") > 1:
-                    try:
-                        ip = str(IPAddress(ip, version=6))
-                    except Exception:
-                        pass
-
-                ip_addresses.add(ip)
-
-        return list(ip_addresses)
-    except UnicodeDecodeError as e:
-        print(f"Error processing Cyberghost server data: {e}")
-        return []
+    domain = "gen4.ninja"
+    print(f"Getting subdomains for {domain}...")
+    subdomains = get_subdomains_from_crtsh(domain)
+    print(f"Found {len(subdomains)} subdomains for {domain}")
+    print(f"Getting IPs for {len(subdomains)} subdomains...")
+    ips = batch_get_ips_for_hostnames(subdomains)
+    print(f"Found {len(ips)} IPs for {domain}")
+    return ips
 
 
 def process_mullvad_servers(data: bytes) -> List[str]:
@@ -516,12 +519,12 @@ def get_ip_ranges_by_asn(asn: str) -> List[str]:
 def get_ip_ranges_by_asn_list(asns_list: List[str]) -> List[str]:
     """Get IP ranges for a list of ASNs."""
     cidrs = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=20) as executor:
         future_to_asn = {
             executor.submit(get_ip_ranges_by_asn, asn): asn for asn in asns_list
         }
 
-        for i, future in enumerate(concurrent.futures.as_completed(future_to_asn), 1):
+        for i, future in enumerate(as_completed(future_to_asn), 1):
             asn = future_to_asn[future]
             try:
                 ranges = future.result()
@@ -619,7 +622,6 @@ def process_dataset(source_name: str, data: bytes) -> List[str]:
             DATASETS["Surfshark-Hostnames"]
         ),
         "Private-Internet-Access": process_pia_servers,
-        "CyberGhost": process_cyberghost_servers,
         "Mullvad": process_mullvad_servers,
         "Firehol-Proxies": process_firehol_proxies,
         "Firehol-Level1": process_firehol_level1,
@@ -724,6 +726,9 @@ def main():
     sorted_surfshark_ips = minify_ipv6_addresses(list(surfshark_ips))
     result_dict["Surfshark"] = sorted_surfshark_ips
     print(f"Processed {len(sorted_surfshark_ips)} IPs for Surfshark (combined)")
+
+    result_dict["Cyberghost"] = get_cyberghost_ips()
+    print(f"Processed {len(result_dict['Cyberghost'])} IPs for Cyberghost")
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as json_file:
         json.dump(result_dict, json_file)
