@@ -1,20 +1,31 @@
+<div align="center">
+  
 # IPSet
 
-A comprehensive IP address categorization and lookup tool that collects addresses from VPN providers, Tor exit nodes, datacenter ASNs, and known proxy lists. Built for security researchers and network administrators who need to quickly identify and categorize IP addresses.
+🔒  A comprehensive IP address categorization and lookup tool that collects addresses from VPN providers, Tor exit nodes, datacenter ASNs, and known proxy lists. 
 
-**Key Features:**
-- ✅ Fast IP categorization and lookup
-- ✅ Sources from 7+ VPN providers
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/tn3w/IPSet/main.yml?label=Build&style=for-the-badge)
+
+### IPInfo Category
+[IPSet](https://github.com/tn3w/IPSet) | [ProtonVPN-IPs](https://github.com/tn3w/ProtonVPN-IPs) | [TunnelBear-IPs](https://github.com/tn3w/TunnelBear-IPs)
+
+</div>
+
+## 🚀 Key Features
+
+- ✅ Fast IP categorization and lookup in ~70ms using optimized lookup
+- ✅ 1.7M+ IPs and CIDRs contained in the dataset
+- ✅ Sources from 7+ VPN providers (ExpressVPN, Surfshark, ProtonVPN, TunnelBear, Private-Internet-Access, CyberGhost, Mullvad)
 - ✅ Includes Tor exit nodes
-- ✅ Datacenter/hosting ASN identification 
-- ✅ Multiple optimized output formats
+- ✅ Datacenter/hosting ASN identification
+- ✅ Multiple optimized output formats (JSON, text)
 - ✅ Support for both IPv4 and IPv6
 
-## JSON Files
+## 📊 Data Files
 
-This repository generates and uses five JSON files:
+The repository maintains five regularly updated data files:
 
-1. **ipset.json**: The primary dataset containing mappings from group names to lists of IP addresses and CIDR ranges. Groups include:
+1. `ipset.json`: The primary dataset containing mappings from group names to lists of IP addresses and CIDR ranges. Groups include:
    - Tor exit nodes
    - VPN providers (ExpressVPN, Surfshark, ProtonVPN, TunnelBear, Private-Internet-Access, CyberGhost, Mullvad)
    - Awesome-Proxies list
@@ -23,15 +34,15 @@ This repository generates and uses five JSON files:
    - Firehol-Proxies
    - Datacenter (CIDRs)
 
-2. **iplookup.json**: An inverse mapping of the data in `ipset.json` for faster O(1) lookups.
+2. `iplookup.json`: An inverse mapping of the data in `ipset.json` for faster O(1) lookups.
 
-3. **iplist.json**: A flat list of all IP addresses without any group information.
+3. `iplist.json`: A flat list of all IP addresses without any group information.
 
-4. **iplist.txt**: A text file version of the flat list for easy integration with other tools.
+4. `iplist.txt`: A text file version of the flat list for easy integration with other tools.
 
-5. **datacenter_asns.json**: A list of Autonomous System Numbers (ASNs) associated with datacenters and hosting providers.
+5. `datacenter_asns.json`: A list of Autonomous System Numbers (ASNs) associated with datacenters and hosting providers.
 
-## Usage
+## 🛠️ Usage
 
 ### Installing and Running
 
@@ -337,7 +348,7 @@ if __name__ == "__main__":
         print(f"{asn} is{' not' if not is_datacenter_asn(asn, asns) else ''} a datacenter ASN")
 ```
 
-## License
+## 📜 License
 Copyright 2025 TN3W
 
 Licensed under the Apache License, Version 2.0 (the "License");

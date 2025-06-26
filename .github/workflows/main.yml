@@ -1,4 +1,4 @@
-name: Update IP and Geo Data
+name: Update IP Database
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:  # Allows manual trigger
 
 jobs:
-  update-data:
+  update-ip-database:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -25,7 +25,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run IP Processor
+      - name: Run IP Database Updater
         run: python main.py
 
       - name: Commit and Push Changes
@@ -33,5 +33,5 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add ipset.json iplookup.json iplist.json iplist.txt datacenter_asns.json
-          git commit -m "Update IP and geo data [skip ci]" || echo "No changes to commit"
+          git commit -m "Update IP Database [skip ci]" || echo "No changes to commit"
           git push
